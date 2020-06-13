@@ -1,5 +1,6 @@
 package com.hdu.shopquery;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.os.Bundle;
@@ -17,10 +18,16 @@ import androidx.core.app.ActivityCompat;
 
 import com.baidu.aip.asrwakeup3.core.mini.ActivityMiniRecog;
 import com.baidu.aip.asrwakeup3.core.mini.AutoCheck;
+import com.baidu.location.BDAbstractLocationListener;
 import com.baidu.location.BDLocation;
+import com.baidu.location.LocationClient;
+import com.baidu.location.LocationClientOption;
 import com.baidu.mapapi.map.BaiduMap;
 import com.baidu.mapapi.map.MapBaseIndoorMapInfo;
+import com.baidu.mapapi.map.MapStatusUpdate;
+import com.baidu.mapapi.map.MapStatusUpdateFactory;
 import com.baidu.mapapi.map.MapView;
+import com.baidu.mapapi.map.MyLocationData;
 import com.baidu.mapapi.model.LatLng;
 import com.baidu.mapapi.search.route.BikingRouteResult;
 import com.baidu.mapapi.search.route.DrivingRouteResult;
@@ -59,7 +66,9 @@ import com.hdu.shopquery.util.DrawableEditText;
 import com.hdu.shopquery.util.FileUtil;
 
 import static com.hdu.shopquery.util.IOfflineResourceConst.DEFAULT_SDK_TTS_MODE;
-
+/*
+ * C1:7C:7B:B2:53:53:BF:8F:7E:1F:6C:C0:EF:BB:E9:15:48:6A:88:F6
+ */
 public class MainActivity extends ActivityMiniRecog {
     private static final int REQUEST_UI = 1,QUERY_WHAT = 1;
     private static final String TAG = "MainActivity",BASE_URL = "http://47.98.247.92:8080/shop/query?question=";;
@@ -76,6 +85,7 @@ public class MainActivity extends ActivityMiniRecog {
     private static final int PERMISSIONS_REQUEST = 1;
     private MapView mMapView = null;
     private BaiduMap mBaiduMap = null;
+    private LocationClient mLocationClient = null;
     private Button button = null;
     private double myLatitude,myLongitude,dstLatitude,dstLongitude;
     private String myFloor,dstFloor;
@@ -86,7 +96,9 @@ public class MainActivity extends ActivityMiniRecog {
         super.onCreate(savedInstanceState);
         // 获取权限
         List<String> permissionList = new ArrayList<>();
-        // 无需要申请的权限
+        // ACCESS_COARSE_LOCATION
+        // ACCESS_FINE_LOCATION
+        permissionList.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         if(!permissionList.isEmpty()) {
             String[] permissions = permissionList.toArray(new String[permissionList.size()]);
             ActivityCompat.requestPermissions(this, permissions, PERMISSIONS_REQUEST);
@@ -145,7 +157,7 @@ public class MainActivity extends ActivityMiniRecog {
                 routePlanWithRouteNode();
             }
         });
-
+        mBaiduMap.setMyLocationEnabled(true);//开启定位图层
         mBaiduMap.setIndoorEnable(true);//打开室内图，默认为关闭状态
         mBaiduMap.setOnBaseIndoorMapListener(new BaiduMap.OnBaseIndoorMapListener() {
             @Override
@@ -164,6 +176,47 @@ public class MainActivity extends ActivityMiniRecog {
                 }
             }
         });
+        mBaiduMap.setOnMapLoadedCallback(new BaiduMap.OnMapLoadedCallback(){
+            @Override
+            public void onMapLoaded(){
+                BDLocation center = mLocationClient.getLastKnownLocation();
+                MapStatusUpdate update = MapStatusUpdateFactory.newLatLng(new LatLng(center.getLatitude(), center.getLongitude()));
+                mBaiduMap.animateMapStatus(update);
+            }
+        });
+        //定位初始化
+        mLocationClient = new LocationClient(this);
+
+        //通过LocationClientOption设置LocationClient相关参数
+        LocationClientOption option = new LocationClientOption();
+        option.setOpenGps(true); // 打开gps
+        option.setCoorType("bd09ll"); // 设置坐标类型
+        option.setScanSpan(1000);
+
+        //设置locationClientOption
+        mLocationClient.setLocOption(option);
+
+        //注册LocationListener监听器
+        MyLocationListener myLocationListener = new MyLocationListener();
+        mLocationClient.registerLocationListener(myLocationListener);
+        //开启地图定位图层
+        mLocationClient.start();
+    }
+    //通过继承抽象类BDAbstractListener并重写其onReceieveLocation方法来获取定位数据，并将其传给MapView
+    public class MyLocationListener extends BDAbstractLocationListener {
+        @Override
+        public void onReceiveLocation(BDLocation location) {
+            //mapView 销毁后不在处理新接收的位置
+            if (location == null || mMapView == null){
+                return;
+            }
+            MyLocationData locData = new MyLocationData.Builder()
+                    .accuracy(location.getRadius())
+                    // 此处设置开发者获取到的方向信息，顺时针0-360
+                    .direction(location.getDirection()).latitude(location.getLatitude())
+                    .longitude(location.getLongitude()).build();
+            mBaiduMap.setMyLocationData(locData);
+        }
     }
     // 初始化视图与语音合成模块
     private void init() {
@@ -354,7 +407,10 @@ public class MainActivity extends ActivityMiniRecog {
             Log.i(TAG,"释放资源成功");
         }
         super.onDestroy();
+        mLocationClient.stop();
+        mBaiduMap.setMyLocationEnabled(false);
         mMapView.onDestroy();
+        mMapView = null;
     }
     private void routePlanWithRouteNode() {
         RoutePlanSearch mSearch = RoutePlanSearch.newInstance();
