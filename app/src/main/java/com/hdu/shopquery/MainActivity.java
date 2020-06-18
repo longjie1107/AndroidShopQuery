@@ -8,9 +8,11 @@ import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.ListView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -89,7 +91,9 @@ public class MainActivity extends ActivityMiniRecog {
     private Button button = null;
     private double myLatitude,myLongitude,dstLatitude,dstLongitude;
     private String myFloor,dstFloor;
-
+    private String[] data = { "缴费机", "服务台", "收银台", "母婴室",
+            "卫生间", "吸烟室", "ATM", "直梯", "出入口" };
+    private String[] data2={"F1","F2","F3","F4","F5","F6","F7"};
     @SuppressLint("HandlerLeak")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -116,6 +120,20 @@ public class MainActivity extends ActivityMiniRecog {
                 start();
             }
         });
+        //listview
+        ArrayAdapter<String> adapter=new ArrayAdapter<String>(
+                MainActivity.this,android.R.layout.simple_list_item_1,data
+        );
+        ArrayAdapter<String>adapter1=new ArrayAdapter<String>(
+                MainActivity.this,android.R.layout.simple_list_item_1,data2
+        );
+
+        ListView listView=(ListView) findViewById(R.id.listview1);
+        //listView.bringToFront();
+        ListView listView1=(ListView) findViewById(R.id.listview2);
+        //listView1.bringToFront();
+        listView.setAdapter(adapter);
+        listView1.setAdapter(adapter1);
         // 知识图谱查询
         searchBtn.setOnClickListener(new View.OnClickListener() {
             @Override
