@@ -3,19 +3,26 @@ package com.hdu.shopquery;
 
 import android.os.Handler;
 import android.os.Message;
+import android.widget.Toast;
 
 import com.baidu.location.BDAbstractLocationListener;
 import com.baidu.location.BDLocation;
 import com.baidu.location.LocationClient;
 import com.baidu.location.LocationClientOption;
+import com.baidu.mapapi.map.BaiduMap;
+import com.baidu.mapapi.model.LatLng;
+import com.baidu.mapapi.search.core.SearchResult;
 import com.baidu.mapapi.search.poi.OnGetPoiSearchResultListener;
 import com.baidu.mapapi.search.poi.PoiDetailResult;
 import com.baidu.mapapi.search.poi.PoiDetailSearchResult;
 import com.baidu.mapapi.search.poi.PoiIndoorInfo;
 import com.baidu.mapapi.search.poi.PoiIndoorOption;
 import com.baidu.mapapi.search.poi.PoiIndoorResult;
+import com.baidu.mapapi.search.poi.PoiNearbySearchOption;
 import com.baidu.mapapi.search.poi.PoiResult;
 import com.baidu.mapapi.search.poi.PoiSearch;
+import com.hdu.shopquery.util.IndoorPoiOverlay;
+import com.hdu.shopquery.util.PoiOverlay;
 
 import java.util.List;
 
@@ -108,39 +115,57 @@ public class LocateUtil {
     /**
      * 室内poi检索示例
      */
-    public void IndoorPoiSearch(String PoiName) {
-        //创建poi检索实例
-        PoiSearch poiSearch = PoiSearch.newInstance();
-        //创建poi监听者
-        OnGetPoiSearchResultListener poiListener = new OnGetPoiSearchResultListener() {
-            @Override
-            public void onGetPoiResult(PoiResult poiResult) {
-            }
+    public void IndoorPoiSearch(final BaiduMap mBaiduMap, String bid, String PoiName) {
+        if(bid!=""){
+            //创建poi检索实例
+            PoiSearch poiSearch = PoiSearch.newInstance();
+            //创建poi监听者
+            OnGetPoiSearchResultListener poiListener = new OnGetPoiSearchResultListener() {
+                @Override
+                public void onGetPoiResult(PoiResult poiResult) {
 
-            @Override
-            public void onGetPoiDetailResult(PoiDetailResult poiDetailResult) {
-            }
+                }
 
-            @Override
-            public void onGetPoiDetailResult(PoiDetailSearchResult poiDetailSearchResult) {
-            }
+                @Override
+                public void onGetPoiDetailResult(PoiDetailResult poiDetailResult) {
+                }
 
-            @Override
-            public void onGetPoiIndoorResult(PoiIndoorResult result) {
-                List<PoiIndoorInfo> poi_info=result.getArrayPoiInfo();
-                PoiIndoorInfo poi=poi_info.get(0);
-                end_latitude=poi.latLng.latitude;                                       //终点的信息
-                end_longitude=poi.latLng.longitude;
-                end_floor=poi.floor;
-            }
-        };
-        //设置poi监听者该方法要先于检索方法searchNearby(PoiNearbySearchOption)前调用，否则会在某些场景出现拿不到回调结果的情况
-        poiSearch.setOnGetPoiSearchResultListener(poiListener);
-        //设置请求参数
-        PoiIndoorOption indoor_Option = new PoiIndoorOption().poiIndoorBid(bid).poiIndoorWd(PoiName);
-        //发起请求
-        poiSearch.searchPoiIndoor(indoor_Option);
-        //释放检索对象
-        poiSearch.destroy();
+                @Override
+                public void onGetPoiDetailResult(PoiDetailSearchResult poiDetailSearchResult) {
+                }
+
+                @Override
+                public void onGetPoiIndoorResult(PoiIndoorResult result) {
+                    List<PoiIndoorInfo> poi_info=result.getArrayPoiInfo();
+                    PoiIndoorInfo poi=poi_info.get(0);
+                    end_latitude=poi.latLng.latitude;                                       //终点的信息
+                    end_longitude=poi.latLng.longitude;
+                    end_floor=poi.floor;
+                    if (result.error == SearchResult.ERRORNO.NO_ERROR) {
+                        mBaiduMap.clear();
+                        //创建PoiOverlay对象
+                        IndoorPoiOverlay poiOverlay = new IndoorPoiOverlay(mBaiduMap);
+                        //设置Poi检索数据
+                        poiOverlay.setData(result);
+
+                        //将poiOverlay添加至地图并缩放至合适级别
+                        poiOverlay.addToMap();
+                        poiOverlay.zoomToSpan();
+                    }
+                }
+            };
+            //设置poi监听者该方法要先于检索方法searchNearby(PoiNearbySearchOption)前调用，否则会在某些场景出现拿不到回调结果的情况
+            poiSearch.setOnGetPoiSearchResultListener(poiListener);
+            //设置请求参数
+            PoiIndoorOption indoor_Option = new PoiIndoorOption().poiIndoorBid(bid).poiIndoorWd(PoiName);
+            //发起请求
+            poiSearch.searchPoiIndoor(indoor_Option);
+            //释放检索对象
+            poiSearch.destroy();
+        }
+        else{
+            Toast.makeText(DemoApplication.getContext(),"该区域不支持室内地位",Toast.LENGTH_SHORT);
+        }
     }
+
 }

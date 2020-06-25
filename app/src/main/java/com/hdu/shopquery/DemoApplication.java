@@ -18,6 +18,12 @@ public class DemoApplication extends Application {
         SDKInitializer.setCoordType(CoordType.BD09LL);
         context = getApplicationContext();
     }
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        ReflectHelper.unseal(base);
+    }
+
     public static Context getContext() {
         return context;
     }

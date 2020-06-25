@@ -3,20 +3,23 @@ package com.hdu.shopquery;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.core.app.ActivityCompat;
 
 import com.baidu.aip.asrwakeup3.core.mini.ActivityMiniRecog;
 import com.baidu.aip.asrwakeup3.core.mini.AutoCheck;
@@ -24,13 +27,30 @@ import com.baidu.location.BDAbstractLocationListener;
 import com.baidu.location.BDLocation;
 import com.baidu.location.LocationClient;
 import com.baidu.location.LocationClientOption;
+import com.baidu.mapapi.bikenavi.params.BikeNaviLaunchParam;
 import com.baidu.mapapi.map.BaiduMap;
+import com.baidu.mapapi.map.BitmapDescriptor;
+import com.baidu.mapapi.map.BitmapDescriptorFactory;
 import com.baidu.mapapi.map.MapBaseIndoorMapInfo;
+import com.baidu.mapapi.map.MapStatus;
 import com.baidu.mapapi.map.MapStatusUpdate;
 import com.baidu.mapapi.map.MapStatusUpdateFactory;
 import com.baidu.mapapi.map.MapView;
+import com.baidu.mapapi.map.Marker;
+import com.baidu.mapapi.map.MarkerOptions;
 import com.baidu.mapapi.map.MyLocationData;
 import com.baidu.mapapi.model.LatLng;
+import com.baidu.mapapi.search.core.PoiInfo;
+import com.baidu.mapapi.search.core.SearchResult;
+import com.baidu.mapapi.search.poi.OnGetPoiSearchResultListener;
+import com.baidu.mapapi.search.poi.PoiDetailResult;
+import com.baidu.mapapi.search.poi.PoiDetailSearchResult;
+import com.baidu.mapapi.search.poi.PoiIndoorInfo;
+import com.baidu.mapapi.search.poi.PoiIndoorOption;
+import com.baidu.mapapi.search.poi.PoiIndoorResult;
+import com.baidu.mapapi.search.poi.PoiNearbySearchOption;
+import com.baidu.mapapi.search.poi.PoiResult;
+import com.baidu.mapapi.search.poi.PoiSearch;
 import com.baidu.mapapi.search.route.BikingRouteResult;
 import com.baidu.mapapi.search.route.DrivingRouteResult;
 import com.baidu.mapapi.search.route.IndoorPlanNode;
@@ -41,6 +61,14 @@ import com.baidu.mapapi.search.route.OnGetRoutePlanResultListener;
 import com.baidu.mapapi.search.route.RoutePlanSearch;
 import com.baidu.mapapi.search.route.TransitRouteResult;
 import com.baidu.mapapi.search.route.WalkingRouteResult;
+import com.baidu.mapapi.walknavi.WalkNavigateHelper;
+import com.baidu.mapapi.walknavi.adapter.IWEngineInitListener;
+import com.baidu.mapapi.walknavi.adapter.IWNaviCalcRouteListener;
+import com.baidu.mapapi.walknavi.adapter.IWRoutePlanListener;
+import com.baidu.mapapi.walknavi.model.WalkRoutePlanError;
+import com.baidu.mapapi.walknavi.params.RouteNodeType;
+import com.baidu.mapapi.walknavi.params.WalkNaviLaunchParam;
+import com.baidu.mapapi.walknavi.params.WalkRouteNodeInfo;
 import com.baidu.speech.EventManager;
 import com.baidu.speech.EventManagerFactory;
 import com.baidu.speech.asr.SpeechConstant;
@@ -55,17 +83,15 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import com.baidu.tts.client.SpeechSynthesizer;
 import com.baidu.tts.client.SpeechSynthesizerListener;
 import com.baidu.tts.client.TtsMode;
-import com.hdu.shopquery.MiniActivity;
 import com.hdu.shopquery.listener.MessageListener;
 import com.hdu.shopquery.util.Auth;
 import com.hdu.shopquery.util.DrawableEditText;
-import com.hdu.shopquery.util.FileUtil;
+import com.hdu.shopquery.util.PoiOverlay;
 
 import static com.hdu.shopquery.util.IOfflineResourceConst.DEFAULT_SDK_TTS_MODE;
 /*
@@ -74,6 +100,7 @@ import static com.hdu.shopquery.util.IOfflineResourceConst.DEFAULT_SDK_TTS_MODE;
 public class MainActivity extends ActivityMiniRecog {
     private static final int REQUEST_UI = 1,QUERY_WHAT = 1;
     private static final String TAG = "MainActivity",BASE_URL = "http://47.98.247.92:8080/shop/query?question=";;
+    private static boolean isPermissionRequested = false;
     private DrawableEditText asrResult;
     private ImageButton searchBtn,asrBtn;
     private TextView answerText;
@@ -88,24 +115,33 @@ public class MainActivity extends ActivityMiniRecog {
     private MapView mMapView = null;
     private BaiduMap mBaiduMap = null;
     private LocationClient mLocationClient = null;
-    private Button button = null;
+    private Button button = null,poiSearchBtn = null;
     private double myLatitude,myLongitude,dstLatitude,dstLongitude;
-    private String myFloor,dstFloor;
+    private PoiSearch mPoiSearch;
+    private WalkNaviLaunchParam walkParam;
+    private String myFloor,dstFloor,bid="",bname="",floor="";
+    private int myCity;
     private String[] data = { "缴费机", "服务台", "收银台", "母婴室",
             "卫生间", "吸烟室", "ATM", "直梯", "出入口" };
     private String[] data2={"F1","F2","F3","F4","F5","F6","F7"};
+    private BitmapDescriptor bdStart = BitmapDescriptorFactory
+            .fromResource(R.drawable.icon_start);
+    private BitmapDescriptor bdEnd = BitmapDescriptorFactory
+            .fromResource(R.drawable.icon_end);
+    private LatLng startPt,endPt;
+    /*导航起终点Marker，可拖动改变起终点的坐标*/
+    private Marker mStartMarker;
+    private Marker mEndMarker;
+    private BikeNaviLaunchParam bikeParam;
+    private Boolean getOutOrIn=false;  //false:室外   true:室内
     @SuppressLint("HandlerLeak")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // 获取权限
-        List<String> permissionList = new ArrayList<>();
-        // ACCESS_COARSE_LOCATION
-        // ACCESS_FINE_LOCATION
-        permissionList.add(Manifest.permission.ACCESS_COARSE_LOCATION);
-        if(!permissionList.isEmpty()) {
-            String[] permissions = permissionList.toArray(new String[permissionList.size()]);
-            ActivityCompat.requestPermissions(this, permissions, PERMISSIONS_REQUEST);
+        permissionGet();
+        if(!isLocationEnabled()){
+            Toast toast=Toast.makeText(getApplicationContext(), "请打开定位服务", Toast.LENGTH_SHORT);
+            toast.show();
         }
         setContentView(R.layout.activity_main);
         // 基于sdk集成1.1 初始化EventManager对象
@@ -141,6 +177,13 @@ public class MainActivity extends ActivityMiniRecog {
                 thread2GetQueryResult(asrResult.getText().toString());
             }
         });
+        //店铺查询
+        poiSearchBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                PoiSearchNearBy(myLatitude,myLongitude,asrResult.getText().toString());
+            }
+        });
 
         // 获取我的位置信息
         final LocateUtil locateUtil = new LocateUtil();
@@ -155,10 +198,7 @@ public class MainActivity extends ActivityMiniRecog {
                     myLatitude=locateUtil.location.getLatitude();
                     myLongitude=locateUtil.location.getLongitude();
                     myFloor = locateUtil.location.getFloor();
-                    locateUtil.bid = locateUtil.location.getBuildingID();
-                    TextView tv;
-                    tv = findViewById(R.id.MyPosText);
-                    tv.setText(myLatitude+" "+myLongitude+" "+locateUtil.bid);
+                    myCity = Integer.parseInt(locateUtil.location.getCityCode());
 //                    locateUtil.IndoorPoiSearch("小龙坎");
                     dstLatitude = locateUtil.end_latitude;
                     dstLongitude = locateUtil.end_longitude;
@@ -168,13 +208,9 @@ public class MainActivity extends ActivityMiniRecog {
         };
         mMapView = findViewById(R.id.bmapView);
         mBaiduMap = mMapView.getMap();
-        button = findViewById(R.id.button);
-        button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                routePlanWithRouteNode();
-            }
-        });
+        MapStatus.Builder builder = new MapStatus.Builder();
+        builder.target(new LatLng(40.048424, 116.313513)).zoom(15);
+        mBaiduMap.setMapStatus(MapStatusUpdateFactory.newMapStatus(builder.build()));
         mBaiduMap.setMyLocationEnabled(true);//开启定位图层
         mBaiduMap.setIndoorEnable(true);//打开室内图，默认为关闭状态
         mBaiduMap.setOnBaseIndoorMapListener(new BaiduMap.OnBaseIndoorMapListener() {
@@ -198,8 +234,78 @@ public class MainActivity extends ActivityMiniRecog {
             @Override
             public void onMapLoaded(){
                 BDLocation center = mLocationClient.getLastKnownLocation();
-                MapStatusUpdate update = MapStatusUpdateFactory.newLatLng(new LatLng(center.getLatitude(), center.getLongitude()));
+                MapStatusUpdate update = MapStatusUpdateFactory.newLatLng(new LatLng(myLatitude, myLongitude));
                 mBaiduMap.animateMapStatus(update);
+            }
+        });
+        //marker点击事件
+        mBaiduMap.setOnMarkerClickListener(new BaiduMap.OnMarkerClickListener() {
+            @Override
+            public boolean onMarkerClick(Marker marker) {
+                //从marker中获取info信息
+                Bundle bundle = marker.getExtraInfo();
+                if(getOutOrIn){
+                    final PoiIndoorInfo infoUtil =  (PoiIndoorInfo) bundle.getParcelable("info");
+                    Toast.makeText(getApplicationContext(),
+                            infoUtil.name, Toast.LENGTH_LONG)
+                            .show();
+                    /*室内导航导航入口*/
+                    Button IWNaviBtn = (Button) findViewById(R.id.IWNaviBtn);
+                    IWNaviBtn.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            startIWNavi();
+                        }
+                    });
+                    startPt = new LatLng(myLatitude,myLongitude);
+                    WalkRouteNodeInfo walkStartNode = new WalkRouteNodeInfo();
+                    walkStartNode.setKeyword("我的位置");
+                    walkStartNode.setLocation(startPt);
+                    walkStartNode.setType(RouteNodeType.KEYWORD);
+                    walkStartNode.setCitycode(myCity);
+
+                    endPt = new LatLng(infoUtil.latLng.latitude,infoUtil.latLng.longitude);
+                    WalkRouteNodeInfo walkEndNode = new WalkRouteNodeInfo();
+                    walkEndNode.setLocation(endPt);
+                    walkEndNode.setType(RouteNodeType.KEYWORD);
+                    walkEndNode.setKeyword(infoUtil.name);
+                    walkEndNode.setBuildingID(infoUtil.bid);
+                    walkEndNode.setFloorID(infoUtil.floor);
+                    walkEndNode.setCitycode(infoUtil.cid);
+                    walkParam = new WalkNaviLaunchParam().startNodeInfo(walkStartNode).endNodeInfo(walkEndNode);
+                }else{
+                    final PoiInfo infoUtil =  (PoiInfo) bundle.getParcelable("info");
+                    Toast.makeText(getApplicationContext(),
+                            infoUtil.getName(), Toast.LENGTH_LONG)
+                            .show();
+                    /*普通步行导航入口*/
+                    Button walkBtn = (Button) findViewById(R.id.NaviBtn);
+                    walkBtn.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            walkParam.extraNaviMode(0);
+                            startWalkNavi();
+                        }
+                    });
+                    startPt = new LatLng(myLatitude,myLongitude);
+                    endPt = new LatLng(infoUtil.getLocation().latitude, infoUtil.getLocation().longitude);
+                    //起终点信息
+                    WalkRouteNodeInfo walkStartNode = new WalkRouteNodeInfo();
+                    walkStartNode.setLocation(startPt);
+                    WalkRouteNodeInfo walkEndNode = new WalkRouteNodeInfo();
+                    walkEndNode.setLocation(endPt);
+                    walkParam = new WalkNaviLaunchParam().startNodeInfo(walkStartNode).endNodeInfo(walkEndNode);
+                }
+
+                //删除之前的起点与终点marker
+                if(mStartMarker!=null&&mEndMarker!=null){
+                    mStartMarker.remove();
+                    mEndMarker.remove();
+                }
+
+                /* 初始化起终点Marker */
+                initOverlay();
+                return true;
             }
         });
         //定位初始化
@@ -219,7 +325,212 @@ public class MainActivity extends ActivityMiniRecog {
         mLocationClient.registerLocationListener(myLocationListener);
         //开启地图定位图层
         mLocationClient.start();
+
+        // 室内poi定位
+        button = findViewById(R.id.IndoorPoiSearchBtn);
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                IndoorPoiSearch();
+            }
+        });
     }
+
+    //室内步行导航
+    private void startIWNavi(){
+        WalkNavigateHelper.getInstance().routePlanWithRouteNode(walkParam, new IWRoutePlanListener() {
+            @Override
+            public void onRoutePlanStart() {
+                Log.d(TAG, "IndoorWalkNavi onRoutePlanStart");
+            }
+
+            @Override
+            public void onRoutePlanSuccess() {
+
+                Log.d(TAG, "onRoutePlanSuccess");
+
+                naviCalcRoute(0);
+
+            }
+
+            @Override
+            public void onRoutePlanFail(WalkRoutePlanError error) {
+                Log.d(TAG, "IndoorWalkNavi onRoutePlanFail");
+            }
+
+        });
+    }
+    //室内步行导航引擎算路
+    private void naviCalcRoute(int routeIndex) {
+        WalkNavigateHelper.getInstance().naviCalcRoute(routeIndex, new IWNaviCalcRouteListener() {
+            @Override
+            public void onNaviCalcRouteSuccess() {
+
+                Intent intent = new Intent();
+                intent.setClass(MainActivity.this, WNaviGuideActivity.class);
+                startActivity(intent);
+            }
+
+            @Override
+            public void onNaviCalcRouteFail(WalkRoutePlanError error) {
+                Log.d(TAG, "IndoorWalkNavi naviCalcRoute fail");
+            }
+        });
+    }
+
+    /**
+     * 开始步行导航
+     */
+    private void startWalkNavi() {
+        Log.d(TAG, "startWalkNavi");
+        try {
+            WalkNavigateHelper.getInstance().initNaviEngine(this, new IWEngineInitListener() {
+                @Override
+                public void engineInitSuccess() {
+                    Log.d(TAG, "WalkNavi engineInitSuccess");
+                    routePlanWithWalkParam();
+                }
+
+                @Override
+                public void engineInitFail() {
+                    Log.d(TAG, "WalkNavi engineInitFail");
+                    WalkNavigateHelper.getInstance().unInitNaviEngine();
+                }
+            });
+        } catch (Exception e) {
+            Log.d(TAG, "startWalkNavi Exception");
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 发起步行导航算路
+     */
+    private void routePlanWithWalkParam() {
+        WalkNavigateHelper.getInstance().routePlanWithRouteNode(walkParam, new IWRoutePlanListener() {
+            @Override
+            public void onRoutePlanStart() {
+                Log.d(TAG, "WalkNavi onRoutePlanStart");
+            }
+
+            @Override
+            public void onRoutePlanSuccess() {
+
+                Log.d(TAG, "onRoutePlanSuccess");
+
+                Intent intent = new Intent();
+                intent.setClass(MainActivity.this, WNaviGuideActivity.class);
+                startActivity(intent);
+
+            }
+
+            @Override
+            public void onRoutePlanFail(WalkRoutePlanError error) {
+                Log.d(TAG, "WalkNavi onRoutePlanFail");
+            }
+
+        });
+    }
+    /**
+     * 初始化导航起终点Marker
+     */
+    public void initOverlay() {
+
+        MarkerOptions ooA = new MarkerOptions().position(startPt).icon(bdStart)
+                .zIndex(9).draggable(true);
+
+        mStartMarker = (Marker) (mBaiduMap.addOverlay(ooA));
+        mStartMarker.setDraggable(true);
+        MarkerOptions ooB = new MarkerOptions().position(endPt).icon(bdEnd)
+                .zIndex(5);
+        mEndMarker = (Marker) (mBaiduMap.addOverlay(ooB));
+
+        mEndMarker.setDraggable(true);
+
+        mBaiduMap.setOnMarkerDragListener(new BaiduMap.OnMarkerDragListener() {
+            public void onMarkerDrag(Marker marker) {
+            }
+
+            public void onMarkerDragEnd(Marker marker) {
+                if(marker == mStartMarker){
+                    startPt = marker.getPosition();
+                }else if(marker == mEndMarker){
+                    endPt = marker.getPosition();
+                }
+
+                WalkRouteNodeInfo walkStartNode = new WalkRouteNodeInfo();
+                walkStartNode.setLocation(startPt);
+                WalkRouteNodeInfo walkEndNode = new WalkRouteNodeInfo();
+                walkEndNode.setLocation(endPt);
+                walkParam = new WalkNaviLaunchParam().startNodeInfo(walkStartNode).endNodeInfo(walkEndNode);
+
+            }
+
+            public void onMarkerDragStart(Marker marker) {
+            }
+        });
+    }
+    /**
+     * Android6.0之后需要动态申请权限
+     */
+    private void permissionGet() {
+        if (Build.VERSION.SDK_INT >= 23 && !isPermissionRequested) {
+
+            isPermissionRequested = true;
+
+            ArrayList<String> permissionsList = new ArrayList<>();
+
+            String[] permissions = {
+                    Manifest.permission.RECORD_AUDIO,
+                    Manifest.permission.ACCESS_NETWORK_STATE,
+                    Manifest.permission.INTERNET,
+                    Manifest.permission.READ_PHONE_STATE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.MODIFY_AUDIO_SETTINGS,
+                    Manifest.permission.WRITE_SETTINGS,
+                    Manifest.permission.ACCESS_WIFI_STATE,
+                    Manifest.permission.CHANGE_WIFI_STATE,
+                    Manifest.permission.CHANGE_WIFI_MULTICAST_STATE,
+                    Manifest.permission.CAMERA
+
+            };
+
+            for (String perm : permissions) {
+                if (PackageManager.PERMISSION_GRANTED != checkSelfPermission(perm)) {
+                    permissionsList.add(perm);
+                    // 进入到这里代表没有权限.
+                }
+            }
+
+            if (permissionsList.isEmpty()) {
+                return;
+            } else {
+                requestPermissions(permissionsList.toArray(new String[permissionsList.size()]), 0);
+            }
+        }
+    }
+
+    //在API大于等于19时，当定位服务关闭时，Settings.Secure.LOCATION_MODE = 0；
+    public boolean isLocationEnabled() {
+        int locationMode = 0;
+        String locationProviders;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            try {
+                locationMode = Settings.Secure.getInt(getContentResolver(), Settings.Secure.LOCATION_MODE);
+            } catch (Settings.SettingNotFoundException e) {
+                e.printStackTrace();
+                return false;
+            }
+            return locationMode != Settings.Secure.LOCATION_MODE_OFF;
+        } else {
+            locationProviders = Settings.Secure.getString(getContentResolver(), Settings.Secure.LOCATION_PROVIDERS_ALLOWED);
+            return !TextUtils.isEmpty(locationProviders);
+            }
+        }
+
     //通过继承抽象类BDAbstractListener并重写其onReceieveLocation方法来获取定位数据，并将其传给MapView
     public class MyLocationListener extends BDAbstractLocationListener {
         @Override
@@ -233,6 +544,13 @@ public class MainActivity extends ActivityMiniRecog {
                     // 此处设置开发者获取到的方向信息，顺时针0-360
                     .direction(location.getDirection()).latitude(location.getLatitude())
                     .longitude(location.getLongitude()).build();
+            if (location.getFloor() != null) {
+                // 当前支持高精度室内定位
+                bid = location.getBuildingID();// 百度内部建筑物ID
+                bname = location.getBuildingName();// 百度内部建筑物缩写
+                floor = location.getFloor();// 室内定位的楼层信息，如 f1,f2,b1,b2
+                mLocationClient.startIndoorMode();// 开启室内定位模式（重复调用也没问题），开启后，定位SDK会融合各种定位信息（GPS,WI-FI，蓝牙，传感器等）连续平滑的输出定位结果；
+            }
             mBaiduMap.setMyLocationData(locData);
         }
     }
@@ -242,6 +560,7 @@ public class MainActivity extends ActivityMiniRecog {
         answerText = findViewById(R.id.AnswerText);
         searchBtn = findViewById(R.id.SearchBtn);
         asrBtn = findViewById(R.id.AsrBtn);
+        poiSearchBtn = findViewById(R.id.PoiSearchBtn);
         appId = Auth.getInstance(this).getAppId();
         appKey = Auth.getInstance(this).getAppKey();
         secretKey = Auth.getInstance(this).getSecretKey();
@@ -429,56 +748,58 @@ public class MainActivity extends ActivityMiniRecog {
         mBaiduMap.setMyLocationEnabled(false);
         mMapView.onDestroy();
         mMapView = null;
+        bdStart.recycle();
+        bdEnd.recycle();
     }
-    private void routePlanWithRouteNode() {
-        RoutePlanSearch mSearch = RoutePlanSearch.newInstance();
-        OnGetRoutePlanResultListener listener = new OnGetRoutePlanResultListener() {
-            @Override
-            public void onGetWalkingRouteResult(WalkingRouteResult walkingRouteResult) {
-
-            }
-
-            @Override
-            public void onGetTransitRouteResult(TransitRouteResult transitRouteResult) {
-
-            }
-
-            @Override
-            public void onGetMassTransitRouteResult(MassTransitRouteResult massTransitRouteResult) {
-
-            }
-
-            @Override
-            public void onGetDrivingRouteResult(DrivingRouteResult drivingRouteResult) {
-
-            }
-
-            @Override
-            public void onGetIndoorRouteResult(IndoorRouteResult indoorRouteResult) {
-                //创建IndoorRouteOverlay实例
-                IndoorRouteOverlay overlay = new IndoorRouteOverlay(mBaiduMap);
-                if (indoorRouteResult.getRouteLines() != null && indoorRouteResult.getRouteLines().size() > 0) {
-                    //获取室内路径规划数据（以返回的第一条路线为例）
-                    //为IndoorRouteOverlay实例设置数据
-                    overlay.setData(indoorRouteResult.getRouteLines().get(0));
-                    //在地图上绘制IndoorRouteOverlay
-                    overlay.addToMap();
-                }
-            }
-
-            @Override
-            public void onGetBikingRouteResult(BikingRouteResult bikingRouteResult) {
-
-            }
-        };
-        mSearch.setOnGetRoutePlanResultListener(listener);
-        IndoorPlanNode startNode = new IndoorPlanNode(new LatLng(myLatitude, myLongitude), "F1");
-        IndoorPlanNode endNode = new IndoorPlanNode(new LatLng(dstLatitude, dstLongitude), dstFloor);
-        mSearch.walkingIndoorSearch(new IndoorRoutePlanOption()
-                .from(startNode)
-                .to(endNode));
-        mSearch.destroy();
-    }
+//    private void routePlanWithRouteNode(LatLng dstPt) {
+//        RoutePlanSearch mSearch = RoutePlanSearch.newInstance();
+//        OnGetRoutePlanResultListener listener = new OnGetRoutePlanResultListener() {
+//            @Override
+//            public void onGetWalkingRouteResult(WalkingRouteResult walkingRouteResult) {
+//
+//            }
+//
+//            @Override
+//            public void onGetTransitRouteResult(TransitRouteResult transitRouteResult) {
+//
+//            }
+//
+//            @Override
+//            public void onGetMassTransitRouteResult(MassTransitRouteResult massTransitRouteResult) {
+//
+//            }
+//
+//            @Override
+//            public void onGetDrivingRouteResult(DrivingRouteResult drivingRouteResult) {
+//
+//            }
+//
+//            @Override
+//            public void onGetIndoorRouteResult(IndoorRouteResult indoorRouteResult) {
+//                //创建IndoorRouteOverlay实例
+//                IndoorRouteOverlay overlay = new IndoorRouteOverlay(mBaiduMap);
+//                if (indoorRouteResult.getRouteLines() != null && indoorRouteResult.getRouteLines().size() > 0) {
+//                    //获取室内路径规划数据（以返回的第一条路线为例）
+//                    //为IndoorRouteOverlay实例设置数据
+//                    overlay.setData(indoorRouteResult.getRouteLines().get(0));
+//                    //在地图上绘制IndoorRouteOverlay
+//                    overlay.addToMap();
+//                }
+//            }
+//
+//            @Override
+//            public void onGetBikingRouteResult(BikingRouteResult bikingRouteResult) {
+//
+//            }
+//        };
+//        mSearch.setOnGetRoutePlanResultListener(listener);
+//        IndoorPlanNode startNode = new IndoorPlanNode(new LatLng(myLatitude, myLongitude), "F1");
+//        IndoorPlanNode endNode = new IndoorPlanNode(new LatLng(dstPt.latitude, dstPt.longitude), "F1");
+//        mSearch.walkingIndoorSearch(new IndoorRoutePlanOption()
+//                .from(startNode)
+//                .to(endNode));
+//        mSearch.destroy();
+//    }
 
     @Override
     protected void onResume() {
@@ -511,5 +832,97 @@ public class MainActivity extends ActivityMiniRecog {
             default:
                 super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
+    }
+
+    //室内定位
+    public void IndoorPoiSearch(){
+        if(bid!=""){
+            //poi检索实例
+            mPoiSearch = PoiSearch.newInstance();
+            //poi检索监听器
+            OnGetPoiSearchResultListener listener = new OnGetPoiSearchResultListener() {
+                @Override
+                public void onGetPoiResult(PoiResult poiResult) {
+                    if (poiResult.error == SearchResult.ERRORNO.NO_ERROR) {
+                        mBaiduMap.clear();
+                        //创建PoiOverlay对象
+                        PoiOverlay poiOverlay = new PoiOverlay(mBaiduMap);
+                        //设置Poi检索数据
+                        poiOverlay.setData(poiResult);
+
+                        //将poiOverlay添加至地图并缩放至合适级别
+                        poiOverlay.addToMap();
+                        poiOverlay.zoomToSpan();
+                    }
+                }
+                @Override
+                public void onGetPoiDetailResult(PoiDetailSearchResult poiDetailSearchResult) {
+
+                }
+                @Override
+                public void onGetPoiIndoorResult(PoiIndoorResult poiIndoorResult) {
+
+                }
+                //废弃
+                @Override
+                public void onGetPoiDetailResult(PoiDetailResult poiDetailResult) {
+
+                }
+            };
+
+            mPoiSearch.setOnGetPoiSearchResultListener(listener);
+            PoiIndoorOption option = new PoiIndoorOption().poiIndoorBid(bid).poiIndoorWd(asrResult.getText().toString());
+            mPoiSearch.searchPoiIndoor( option);
+            mPoiSearch.destroy();
+        }else{
+            Toast.makeText(getApplicationContext(),"该区域不支持室内地位",Toast.LENGTH_SHORT);
+        }
+    }
+
+    //周边定位
+    public void PoiSearchNearBy(double myLatitude,double myLongitude,String keyword){
+        //poi检索实例
+        mPoiSearch = PoiSearch.newInstance();
+        //poi检索监听器
+        OnGetPoiSearchResultListener listener = new OnGetPoiSearchResultListener() {
+            @Override
+            public void onGetPoiResult(PoiResult poiResult) {
+                if (poiResult.error == SearchResult.ERRORNO.NO_ERROR) {
+                    mBaiduMap.clear();
+                    //创建PoiOverlay对象
+                    PoiOverlay poiOverlay = new PoiOverlay(mBaiduMap);
+
+                    //设置Poi检索数据
+                    poiOverlay.setData(poiResult);
+
+                    //将poiOverlay添加至地图并缩放至合适级别
+                    poiOverlay.addToMap();
+                    poiOverlay.zoomToSpan();
+                }
+            }
+            @Override
+            public void onGetPoiDetailResult(PoiDetailSearchResult poiDetailSearchResult) {
+
+            }
+            @Override
+            public void onGetPoiIndoorResult(PoiIndoorResult poiIndoorResult) {
+
+            }
+            //废弃
+            @Override
+            public void onGetPoiDetailResult(PoiDetailResult poiDetailResult) {
+
+            }
+        };
+        mPoiSearch.setOnGetPoiSearchResultListener(listener);
+        /**
+         * 以当前位置为中心，搜索半径1000米以内的店铺
+         */
+        mPoiSearch.searchNearby(new PoiNearbySearchOption()
+                .location(new LatLng(myLatitude, myLongitude))
+                .radius(1000)
+                .keyword(keyword)
+        );
+        mPoiSearch.destroy();
     }
 }

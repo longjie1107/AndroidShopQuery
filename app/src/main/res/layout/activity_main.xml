@@ -24,7 +24,7 @@
             android:layout_height="match_parent"
             android:layout_weight="5"
             android:gravity="center"
-            android:text="银泰百货" />
+            android:text="金沙天街" />
     </LinearLayout>
 
     <LinearLayout
@@ -123,29 +123,43 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="4"
+        android:layout_weight="1"
         android:orientation="vertical">
 
-        <Button
-            android:id="@+id/button"
-            android:layout_width="150dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="50dp"
-            android:layout_gravity="center"
-            android:text="寻找路径" />
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/MyPosText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="我的位置" />
+            <Button
+                android:id="@+id/IndoorPoiSearchBtn"
+                android:layout_width="100dp"
+                android:layout_height="50dp"
+                android:layout_gravity="center"
+                android:text="室内查找店铺"
+                android:textSize="12sp" />
 
-        <TextView
-            android:id="@+id/textView2"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="店家位置" />
+            <Button
+                android:id="@+id/IWNaviBtn"
+                android:layout_width="100dp"
+                android:layout_height="50dp"
+                android:layout_gravity="center"
+                android:layout_weight="1"
+                android:text="室内导航" />
+
+            <Button
+                android:id="@+id/PoiSearchBtn"
+                android:layout_width="100dp"
+                android:layout_height="50dp"
+                android:layout_gravity="center"
+                android:text="查找店铺" />
+
+            <Button
+                android:id="@+id/NaviBtn"
+                android:layout_width="100dp"
+                android:layout_height="50dp"
+                android:text="导航" />
+        </LinearLayout>
 
     </LinearLayout>
 
