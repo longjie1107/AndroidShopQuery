@@ -331,7 +331,7 @@ public class MainActivity extends ActivityMiniRecog {
         button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                IndoorPoiSearch();
+                locateUtil.IndoorPoiSearch(mBaiduMap,bid,asrResult.getText().toString());
             }
         });
     }
@@ -834,50 +834,50 @@ public class MainActivity extends ActivityMiniRecog {
         }
     }
 
-    //室内定位
-    public void IndoorPoiSearch(){
-        if(bid!=""){
-            //poi检索实例
-            mPoiSearch = PoiSearch.newInstance();
-            //poi检索监听器
-            OnGetPoiSearchResultListener listener = new OnGetPoiSearchResultListener() {
-                @Override
-                public void onGetPoiResult(PoiResult poiResult) {
-                    if (poiResult.error == SearchResult.ERRORNO.NO_ERROR) {
-                        mBaiduMap.clear();
-                        //创建PoiOverlay对象
-                        PoiOverlay poiOverlay = new PoiOverlay(mBaiduMap);
-                        //设置Poi检索数据
-                        poiOverlay.setData(poiResult);
-
-                        //将poiOverlay添加至地图并缩放至合适级别
-                        poiOverlay.addToMap();
-                        poiOverlay.zoomToSpan();
-                    }
-                }
-                @Override
-                public void onGetPoiDetailResult(PoiDetailSearchResult poiDetailSearchResult) {
-
-                }
-                @Override
-                public void onGetPoiIndoorResult(PoiIndoorResult poiIndoorResult) {
-
-                }
-                //废弃
-                @Override
-                public void onGetPoiDetailResult(PoiDetailResult poiDetailResult) {
-
-                }
-            };
-
-            mPoiSearch.setOnGetPoiSearchResultListener(listener);
-            PoiIndoorOption option = new PoiIndoorOption().poiIndoorBid(bid).poiIndoorWd(asrResult.getText().toString());
-            mPoiSearch.searchPoiIndoor( option);
-            mPoiSearch.destroy();
-        }else{
-            Toast.makeText(getApplicationContext(),"该区域不支持室内地位",Toast.LENGTH_SHORT);
-        }
-    }
+//    //室内定位
+//    public void IndoorPoiSearch(){
+//        if(bid!=""){
+//            //poi检索实例
+//            mPoiSearch = PoiSearch.newInstance();
+//            //poi检索监听器
+//            OnGetPoiSearchResultListener listener = new OnGetPoiSearchResultListener() {
+//                @Override
+//                public void onGetPoiResult(PoiResult poiResult) {
+//                    if (poiResult.error == SearchResult.ERRORNO.NO_ERROR) {
+//                        mBaiduMap.clear();
+//                        //创建PoiOverlay对象
+//                        PoiOverlay poiOverlay = new PoiOverlay(mBaiduMap);
+//                        //设置Poi检索数据
+//                        poiOverlay.setData(poiResult);
+//
+//                        //将poiOverlay添加至地图并缩放至合适级别
+//                        poiOverlay.addToMap();
+//                        poiOverlay.zoomToSpan();
+//                    }
+//                }
+//                @Override
+//                public void onGetPoiDetailResult(PoiDetailSearchResult poiDetailSearchResult) {
+//
+//                }
+//                @Override
+//                public void onGetPoiIndoorResult(PoiIndoorResult poiIndoorResult) {
+//
+//                }
+//                //废弃
+//                @Override
+//                public void onGetPoiDetailResult(PoiDetailResult poiDetailResult) {
+//
+//                }
+//            };
+//
+//            mPoiSearch.setOnGetPoiSearchResultListener(listener);
+//            PoiIndoorOption option = new PoiIndoorOption().poiIndoorBid(bid).poiIndoorWd(asrResult.getText().toString());
+//            mPoiSearch.searchPoiIndoor( option);
+//            mPoiSearch.destroy();
+//        }else{
+//            Toast.makeText(getApplicationContext(),"该区域不支持室内地位",Toast.LENGTH_SHORT);
+//        }
+//    }
 
     //周边定位
     public void PoiSearchNearBy(double myLatitude,double myLongitude,String keyword){
